@@ -1,0 +1,13 @@
+{
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "devcontainer",
+  "workspaceFolder": "/workspace",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "betterthantomorrow.calva",
+        "ms-azuretools.vscode-docker"
+      ]
+    }
+  }
+}
