@@ -1,4 +1,16 @@
 ---
+# Legend in IP addresses:
+#   172.30.0.XY
+# Where:
+#   X = 1   Redis
+#   X = 2   Sentinel
+#   X = 3   Dev container
+# and
+#   Y = instance number
+# so that
+#   11 = Redis instance 1
+#   23 = Sentinel instance 3
+
 services:
   redis-1:
     image: bitnami/redis:6.2.13
@@ -8,57 +20,57 @@ services:
       - ALLOW_EMPTY_PASSWORD=yes
     networks:
       jedis:
-        ipv4_address: 172.20.1.1
+        ipv4_address: 172.30.0.11
 
   redis-2:
     image: bitnami/redis:6.2.13
     init: true
     environment:
       - REDIS_REPLICATION_MODE=slave
-      - REDIS_MASTER_HOST=172.20.1.1
+      - REDIS_MASTER_HOST=172.30.0.11
       - ALLOW_EMPTY_PASSWORD=yes
     networks:
       jedis:
-        ipv4_address: 172.20.1.2
+        ipv4_address: 172.30.0.12
 
   redis-sentinel-1:
     image: bitnami/redis-sentinel:6.2.13
     init: true
     environment:
-      - REDIS_MASTER_HOST=172.20.1.1
+      - REDIS_MASTER_HOST=172.30.0.11
       - REDIS_SENTINEL_DOWN_AFTER_MILLISECONDS=1000
       - REDIS_SENTINEL_FAILOVER_TIMEOUT=2000
       - REDIS_SENTINEL_QUORUM=2
       - ALLOW_EMPTY_PASSWORD=yes
     networks:
       jedis:
-        ipv4_address: 172.20.2.1
+        ipv4_address: 172.30.0.21
 
   redis-sentinel-2:
     image: bitnami/redis-sentinel:6.2.13
     init: true
     environment:
-      - REDIS_MASTER_HOST=172.20.1.1
+      - REDIS_MASTER_HOST=172.30.0.11
       - REDIS_SENTINEL_DOWN_AFTER_MILLISECONDS=1000
       - REDIS_SENTINEL_FAILOVER_TIMEOUT=2000
       - REDIS_SENTINEL_QUORUM=2
       - ALLOW_EMPTY_PASSWORD=yes
     networks:
       jedis:
-        ipv4_address: 172.20.2.2
+        ipv4_address: 172.30.0.22
 
   redis-sentinel-3:
     image: bitnami/redis-sentinel:6.2.13
     init: true
     environment:
-      - REDIS_MASTER_HOST=172.20.1.1
+      - REDIS_MASTER_HOST=172.30.0.11
       - REDIS_SENTINEL_DOWN_AFTER_MILLISECONDS=1000
       - REDIS_SENTINEL_FAILOVER_TIMEOUT=2000
       - REDIS_SENTINEL_QUORUM=2
       - ALLOW_EMPTY_PASSWORD=yes
     networks:
       jedis:
-        ipv4_address: 172.20.2.3
+        ipv4_address: 172.30.0.23
 
   devcontainer:
     image: jedis-test:dev
@@ -74,10 +86,10 @@ services:
     command: "sleep infinity"
     networks:
       jedis:
-        ipv4_address: 172.20.3.1
+        ipv4_address: 172.30.0.30
 
 networks:
   jedis:
     ipam:
       config:
-        - subnet: 172.20.0.0/16
+        - subnet: 172.30.0.0/24
