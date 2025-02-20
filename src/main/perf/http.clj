@@ -16,16 +16,9 @@
   resp)
 
 
-(defn request
-  ([method url] (request method url nil))
-  ([method url opts]
-   (-> (http/request {:method       method
-                      :url          url
-                      :query-params (:query opts)
-                      :headers      {"content-type" "application/json"
-                                     "accept"       "application/json"}
-                      :as           :stream})
-       (deref)
-       (check-status opts)
-       :body
-       (json/read-value json/keyword-keys-object-mapper))))
+(defn request [req]
+  (-> (http/request (assoc req :as :stream))
+      (deref)
+      #_#_#_(check-status opts)
+          :body
+        (json/read-value json/keyword-keys-object-mapper)))

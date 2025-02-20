@@ -22,7 +22,11 @@
 
 
 (comment
-  (def api-1 (k/kube-api ctx-1))
+  ;; FIXME: Fix this so that it it accepts api coords only. Open the proxy separately.
+  ;; (def api-1 (k/kube-api ctx-1))
+
+  (def api (k/kube-api))
+
   ;
   )
 
@@ -202,16 +206,17 @@
 ;;
 
 
-(defn get-redis-master-pod-name []
-  (->> (range 3)
-       (map (fn [i] (str "redis-sentinel-node-" i)))
-       (some (fn [pod-name]
-               (try
-                 (with-open [^Jedis client (jedis-factory pod-name)]
-                   (when (-> (j/replication-info client) :role (= :master))
-                     pod-name))
-                 (catch Exception _
-                   nil))))))
+(comment
+  (defn get-redis-master-pod-name []
+    (->> (range 3)
+         (map (fn [i] (str "redis-sentinel-node-" i)))
+         (some (fn [pod-name]
+                 (try
+                   (with-open [^Jedis client (jedis-factory pod-name)]
+                     (when (-> (j/replication-info client) :role (= :master))
+                       pod-name))
+                   (catch Exception _
+                     nil)))))))
 
 
 (comment

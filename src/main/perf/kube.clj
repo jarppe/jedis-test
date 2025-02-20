@@ -276,58 +276,93 @@
   (.write w (str v)))
 
 
-(defn kube-api [ctx]
-  (let [proxy      (kube-proxy ctx)
-        proxy-port (kube-proxy-port proxy)]
-    (->KubeApiInst proxy ctx proxy-port)))
+;; FIXME: This is the old way, fix this:
+#_(defn kube-api [ctx]
+    (let [proxy      (kube-proxy ctx)
+          proxy-port (kube-proxy-port proxy)]
+      (->KubeApiInst proxy ctx proxy-port)))
 
 
-(defn close-kube-api [api]
-  (.close ^java.io.Closeable api))
+(defn get-ssl-engine [cacert]
+  (let [cert (with-open [in (io/input-stream cacert)]
+               (-> (java.security.cert.CertificateFactory/getInstance "X.509")
+                   (.generateCertificate in)))
+        ks   (doto (-> (java.security.KeyStore/getDefaultType)
+                       (java.security.KeyStore/getInstance))
+               (.load nil)
+               (.setCertificateEntry "cacert" cert))
+        tm   (-> (doto (-> (javax.net.ssl.TrustManagerFactory/getDefaultAlgorithm)
+                           (javax.net.ssl.TrustManagerFactory/getInstance))
+                   (.init ks))
+                 (.getTrustManagers))]
+    (-> (doto (javax.net.ssl.SSLContext/getInstance "TLS")
+          (.init nil tm nil))
+        (.createSSLEngine #_#_"kubernetes.default.svc" 443))))
 
 
-(comment
-  (with-open [api (kube-api {:context   "test:eu-west-1"
-                             :namespace "review-3789"})]
-    (str api))
-  ;;=> "KubeApi[context=\"test:eu-west-1\",namespace=\"review-3789\",proxy-port=51534]"
 
-  (let [api (kube-api {:context   "test:eu-west-1"
-                       :namespace "review-3789"})]
-    (close-kube-api api)
-    (Thread/sleep 100) ; Process termination is async
-    (str api))
-  ;;=> "KubeApi[context=\"test:eu-west-1\",namespace=\"review-3789\",proxy-terminated,exit-code:143]" 
-  )
+(defn kube-pod-api
+  ([] (kube-pod-api nil))
+  ([ctx]
+   (let [api-server "https://kubernetes.default.svc"
+         sa         (io/file "/var/run/secrets/kubernetes.io/serviceaccount")
+         token      (-> (io/file sa "token") (slurp) (str/trim))
+         ssl-engine (-> (io/file sa "ca.crt") (get-ssl-engine))
+         namespace  (-> (io/file sa "namespace") (slurp) (str/trim))]
+     (-> ctx
+         (update :namespace  (fnil identity namespace))
+         (merge {:api-server (str api-server ":443")
+                 :sslengine  ssl-engine})
+         (update :headers merge {"authorization" (str "Bearer " token)
+                                 "content-type"  "application/json"
+                                 "accept"        "application/json"})))))
 
 
 (defn- path-template-value-not-found! [k]
   (throw (ex-info (str "url template value not found: " (pr-str k)) {:k k})))
 
 
-(defn- apply-path-template [url request]
-  (str/replace url
-               #"\{([^}]+)\}"
-               (fn [[_ k]]
-                 (-> k (keyword) request (or (path-template-value-not-found! k))))))
+(defn- apply-path-template [req]
+  (let [api-url (-> req :api-url)]
+    (update req :url str/replace #"\{([^}]+)\}" (fn [[_ k]] (-> k (keyword) req (or (path-template-value-not-found! k)))))))
+
+
+(defn- apply-api-server [req]
+  (let [api-server (-> req :api-server)]
+    (update req :url (fn [url] (str api-server url)))))
 
 
 (defn kube-api-request
   ([api method url] (kube-api-request api method url nil))
   ([api method url opts]
-   (let [ctx        (-> api :ctx)
-         proxy-port (-> api :proxy-port)
-         url        (str "http://127.0.0.1:" proxy-port
-                         (apply-path-template url (merge ctx opts)))]
-     (http/request method url opts))))
+   (-> (merge-with (fn [left right]
+                     (if (map? left)
+                       (merge left right)
+                       right))
+                   api
+                   {:method method
+                    :url    url}
+                   opts)
+       (apply-path-template)
+       (apply-api-server)
+       (org.httpkit.client/request)
+       #_(deref))))
 
 
 (comment
-  (with-open [api (kube-api {:context   "test:eu-west-1"
-                             :namespace "review-3789"})]
-    (->> (kube-api-request api :get "/apis/apps/v1/namespaces/{namespace}/controllerrevisions")
-         :items
-         (map (comp :name :metadata))))
+  (def api (kube-pod-api))
+
+  (def resp (org.httpkit.client/request (kube-api-request api :get "/api")))
+  (type resp)
+  (keys @resp)
+  ;;=> 
+
+
+  (let []
+    (kube-api-request api :get "/apis/apps/v1/namespaces/{namespace}/controllerrevisions")
+    #_(->> (kube-api-request api :get "/apis/apps/v1/namespaces/{namespace}/controllerrevisions")
+           :items
+           (map (comp :name :metadata))))
   ;;=> ("elasticsearch-master-6775cdf686" 
   ;;    "kafka-d69cd87f8" 
   ;;    "kafka-zookeeper-6f8bbd74d8" 
