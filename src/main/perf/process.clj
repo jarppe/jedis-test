@@ -1,4 +1,4 @@
-(ns kube-test.process
+(ns perf.process
   (:require [clojure.string :as str]
             [clojure.java.io :as io]))
 
@@ -13,21 +13,28 @@
 ;;
 
 
-(defrecord ProcessInst [^Process process exit pid ^java.io.OutputStream in ^java.io.InputStream out ^java.io.InputStream err info]
+(defrecord ProcessInst [^Process process exit-code-promise pid ^java.io.OutputStream in ^java.io.InputStream out ^java.io.InputStream err info]
   java.io.Closeable
   (close [_] (.destroy process))
 
   clojure.lang.IDeref
-  (deref [_] (deref exit))
+  (deref [_] (deref exit-code-promise))
 
   clojure.lang.IBlockingDeref
-  (deref [_ timeout timeout-value] (deref exit timeout timeout-value))
+  (deref [_ timeout timeout-value] (deref exit-code-promise timeout timeout-value))
+
+  clojure.lang.IPending
+  (isRealized [_] (realized? exit-code-promise))
 
   java.lang.Object
   (toString [_] (.toString process)))
 
 
-(defn process ^ProcessInst [{:keys [cmd env info]}]
+(defmethod print-method ProcessInst [v ^java.io.Writer w]
+  (.write w (str v)))
+
+
+(defn process ^ProcessInst [{:keys [cmd env info on-exit]}]
   (let [builder (ProcessBuilder. ^java.util.List (mapv str cmd))]
     (reduce-kv (fn [^java.util.Map e k v]
                  (.put e
@@ -39,7 +46,10 @@
     (let [proc      (.start builder)
           exit-code (promise)]
       (-> (.onExit proc)
-          (.thenApply (fn [^Process p] (deliver exit-code (.exitValue p)))))
+          (.thenApply (fn [^Process p]
+                        (deliver exit-code (.exitValue p))
+                        (when on-exit
+                          (on-exit exit-code)))))
       (->ProcessInst proc
                      exit-code
                      (.pid proc)
@@ -63,11 +73,6 @@
   (when-let [^Process p (:process proc)]
     (when (not (.isAlive p))
       (.exitValue p))))
-
-
-(defmethod print-method ProcessInst [v ^java.io.Writer w]
-  (.write w (str v)))
-
 
 
 (comment

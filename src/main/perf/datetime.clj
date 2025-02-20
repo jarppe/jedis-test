@@ -1,4 +1,4 @@
-(ns kube-test.datetime
+(ns perf.datetime
   (:import (java.time ZonedDateTime
                       ZoneId)
            (java.time.format DateTimeFormatter)))

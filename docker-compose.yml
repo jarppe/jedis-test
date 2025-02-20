@@ -1,17 +1,22 @@
 ---
-# Legend in IP addresses:
-#   172.30.0.XY
-# Where:
-#   X = 1   Redis
-#   X = 2   Sentinel
-#   X = 3   Dev container
-# and
-#   Y = instance number
-# so that
-#   11 = Redis instance 1
-#   23 = Sentinel instance 3
-
 services:
+  devcontainer:
+    image: jedis-test:dev
+    init: false # Devcontainer image already emplys tini (for kube etc)
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.kube:/root/.kube:ro
+      - .:/workspace
+    environment:
+      - TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal
+      - KUBE_CONTEXT=docker
+      - KUBE_NAMESPACE=docker
+    command: "sleep infinity"
+    networks:
+      redis:
+        ipv4_address: 172.30.42.10
+
   redis-1:
     image: bitnami/redis:6.2.13
     init: true
@@ -19,77 +24,48 @@ services:
       - REDIS_REPLICATION_MODE=master
       - ALLOW_EMPTY_PASSWORD=yes
     networks:
-      jedis:
-        ipv4_address: 172.30.0.11
+      redis:
+        ipv4_address: 172.30.42.11
+
+  redis-sentinel-1:
+    image: bitnami/redis-sentinel:6.2.13
+    init: true
+    environment:
+      - REDIS_MASTER_HOST=172.30.42.11
+      - REDIS_SENTINEL_DOWN_AFTER_MILLISECONDS=1000
+      - REDIS_SENTINEL_FAILOVER_TIMEOUT=2000
+      - REDIS_SENTINEL_QUORUM=2
+      - ALLOW_EMPTY_PASSWORD=yes
+    networks:
+      redis:
+        ipv4_address: 172.30.42.12
 
   redis-2:
     image: bitnami/redis:6.2.13
     init: true
     environment:
       - REDIS_REPLICATION_MODE=slave
-      - REDIS_MASTER_HOST=172.30.0.11
+      - REDIS_MASTER_HOST=172.30.42.11
       - ALLOW_EMPTY_PASSWORD=yes
     networks:
-      jedis:
-        ipv4_address: 172.30.0.12
-
-  redis-sentinel-1:
-    image: bitnami/redis-sentinel:6.2.13
-    init: true
-    environment:
-      - REDIS_MASTER_HOST=172.30.0.11
-      - REDIS_SENTINEL_DOWN_AFTER_MILLISECONDS=1000
-      - REDIS_SENTINEL_FAILOVER_TIMEOUT=2000
-      - REDIS_SENTINEL_QUORUM=2
-      - ALLOW_EMPTY_PASSWORD=yes
-    networks:
-      jedis:
-        ipv4_address: 172.30.0.21
+      redis:
+        ipv4_address: 172.30.42.13
 
   redis-sentinel-2:
     image: bitnami/redis-sentinel:6.2.13
     init: true
     environment:
-      - REDIS_MASTER_HOST=172.30.0.11
+      - REDIS_MASTER_HOST=172.30.42.11
       - REDIS_SENTINEL_DOWN_AFTER_MILLISECONDS=1000
       - REDIS_SENTINEL_FAILOVER_TIMEOUT=2000
       - REDIS_SENTINEL_QUORUM=2
       - ALLOW_EMPTY_PASSWORD=yes
     networks:
-      jedis:
-        ipv4_address: 172.30.0.22
-
-  redis-sentinel-3:
-    image: bitnami/redis-sentinel:6.2.13
-    init: true
-    environment:
-      - REDIS_MASTER_HOST=172.30.0.11
-      - REDIS_SENTINEL_DOWN_AFTER_MILLISECONDS=1000
-      - REDIS_SENTINEL_FAILOVER_TIMEOUT=2000
-      - REDIS_SENTINEL_QUORUM=2
-      - ALLOW_EMPTY_PASSWORD=yes
-    networks:
-      jedis:
-        ipv4_address: 172.30.0.23
-
-  devcontainer:
-    image: jedis-test:dev
-    build:
-      context: .devcontainer
-    init: true
-    restart: always
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - .:/workspace
-    environment:
-      - TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal
-    command: "sleep infinity"
-    networks:
-      jedis:
-        ipv4_address: 172.30.0.30
+      redis:
+        ipv4_address: 172.30.42.14
 
 networks:
-  jedis:
+  redis:
     ipam:
       config:
-        - subnet: 172.30.0.0/24
+        - subnet: 172.30.42.0/24

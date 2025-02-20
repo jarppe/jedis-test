@@ -1,0 +1,28 @@
+[user]
+  name = Jarppe
+  email = jarppe@metosin.fi
+[init]
+  defaultBranch = main
+[alias]
+  co = checkout
+  st = status
+  ci = commit
+  hist = log --pretty=format:\"%h %ad | %s%d [%an]\" --graph --date=short
+  expl = log --author jarppe --no-merges --date=short --pretty=format:\"%ad | %Cgreen%s%Creset%d\"
+  daily = log --author jarppe --no-merges --date=short --pretty=format:\"%ad | %Cgreen%s%Creset%d\" --since=yesterday
+[push]
+  default = simple
+  followTags = true
+[color]
+  ui = true
+[color "diff"]
+  meta = 11
+  frag = magenta bold
+  commit = yellow bold
+  old = red bold
+  new = green bold
+  whitespace = red reverse
+[pull]
+  rebase = false
+[rerere]
+  enabled = true

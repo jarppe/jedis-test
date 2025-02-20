@@ -1,0 +1,9 @@
+*
+
+!/.dockerignore
+!/.gitignore
+!/bashrc
+!/devcontainer.json
+!/devcontainer.yaml
+!/Dockerfile
+!/gitconfig

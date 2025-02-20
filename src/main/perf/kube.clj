@@ -1,8 +1,8 @@
-(ns kube-test.kube
+(ns perf.kube
   (:require [clojure.string :as str]
-            [clojure.java.io :as io] 
-            [kube-test.http :as http]
-            [kube-test.process :as p]))
+            [clojure.java.io :as io]
+            [perf.http :as http]
+            [perf.process :as p]))
 
 
 (set! *warn-on-reflection* true)
@@ -58,7 +58,7 @@
 
 (defn- on-exit
   ([proc command] (on-exit proc command nil))
-  ([proc command on-exit]
+  ([proc command on-exit-callback]
    (future
      (let [error-output (->> proc
                              :err
@@ -69,8 +69,8 @@
          (.println System/err (format "\nERROR: kubectl %s: exit = %d" (name command) exit-code))
          (.println System/err error-output)
          (.println System/err))
-       (when on-exit
-         (on-exit))))
+       (when on-exit-callback
+         (on-exit-callback exit-code))))
    proc))
 
 
@@ -172,7 +172,7 @@
                                                                ports)))
                                  :info {:target-name  target-name
                                         :port-mapping port-mapping}})]
-    (on-exit proc :port-forward (fn [] (deliver port-mapping nil)))
+    (on-exit proc :port-forward (fn [_] (deliver port-mapping nil)))
     (future
       (->> proc
            :out
@@ -221,7 +221,7 @@
                                                              (dissoc :namespace)
                                                              (assoc :port port)))
                                :info {:proxy-port used-port}})]
-     (on-exit proc :proxy (fn [] (deliver used-port nil)))
+     (on-exit proc :proxy (fn [_] (deliver used-port nil)))
      (future
        (->> proc
             :out
@@ -251,7 +251,7 @@
 ;;
 
 
-(defrecord KubeApiInst [proxy ctx]
+(defrecord KubeApiInst [proxy ctx proxy-port]
   java.io.Closeable
   (close [_] (p/destroy proxy))
 
@@ -268,7 +268,7 @@
                           (pr-str namespace)
                           "-")
                         (if (p/alive? proxy)
-                          (str "proxy-port=" (-> ctx :proxy-port))
+                          (str "proxy-port=" proxy-port)
                           (str "proxy-terminated,exit-code:" (p/exit-code proxy))))))
 
 
@@ -276,18 +276,17 @@
   (.write w (str v)))
 
 
-(defn kube-api [opts]
-  (let [proxy      (kube-proxy opts)
-        proxy-port (kube-proxy-port proxy)
-        ctx        (assoc opts :proxy-port proxy-port)]
-    (->KubeApiInst proxy ctx)))
+(defn kube-api [ctx]
+  (let [proxy      (kube-proxy ctx)
+        proxy-port (kube-proxy-port proxy)]
+    (->KubeApiInst proxy ctx proxy-port)))
 
 
 (defn close-kube-api [api]
   (.close ^java.io.Closeable api))
 
 
-(comment 
+(comment
   (with-open [api (kube-api {:context   "test:eu-west-1"
                              :namespace "review-3789"})]
     (str api))
@@ -313,19 +312,13 @@
                  (-> k (keyword) request (or (path-template-value-not-found! k))))))
 
 
-(defn- check-status [resp]
-  (when-not (<= 200 (:status resp) 299)
-    (throw (ex-info (format "API call failed: status=%d" (:status resp)) {:resp resp})))
-  resp)
-
-
 (defn kube-api-request
   ([api method url] (kube-api-request api method url nil))
   ([api method url opts]
-   (let [ctx (-> api :ctx)
-         url (str "http://127.0.0.1:"
-                  (-> ctx :proxy-port)
-                  (apply-path-template url (merge ctx opts)))]
+   (let [ctx        (-> api :ctx)
+         proxy-port (-> api :proxy-port)
+         url        (str "http://127.0.0.1:" proxy-port
+                         (apply-path-template url (merge ctx opts)))]
      (http/request method url opts))))
 
 
@@ -363,9 +356,9 @@
 (defn pods
   ([api] (pods api nil))
   ([api label-selector]
-   (-> (kube-api-request api 
-                         :get  
-                         "/api/v1/namespaces/{namespace}/pods" 
+   (-> (kube-api-request api
+                         :get
+                         "/api/v1/namespaces/{namespace}/pods"
                          {:query {:labelSelector (format-label-selector label-selector)}})
        :items)))
 
@@ -403,7 +396,7 @@
   )
 
 
-(defn services 
+(defn services
   ([api] (services api nil))
   ([api label-selector]
    (-> (kube-api-request api
@@ -414,7 +407,7 @@
 
 
 (defn service [api svc-name]
-  (kube-api-request api 
+  (kube-api-request api
                     :get
                     "/api/v1/namespaces/{namespace}/services/{svc-name}"
                     {:svc-name svc-name}))
@@ -438,13 +431,13 @@
 
 
 (defn delete-pod [api pod-name]
-  (kube-api-request api 
+  (kube-api-request api
                     :delete
                     "/api/v1/namespaces/{namespace}/pods/{pod-name}"
                     {:pod-name pod-name}))
 
 
-(defn deployments 
+(defn deployments
   ([api] (deployments api nil))
   ([api label-selector]
    (-> (kube-api-request api
@@ -461,7 +454,7 @@
                     {:deployment-name deployment-name}))
 
 
-(defn statefulsets 
+(defn statefulsets
   ([api] (statefulsets api nil))
   ([api label-selector]
    (-> (kube-api-request api
@@ -502,7 +495,7 @@
        :status
        ((juxt :replicas :currentReplicas)))
   ;;=> [3 3] 
-  
+
   (->> (pods api (->> (statefulset api "redis-sentinel-node")
                       :spec
                       :selector
@@ -514,5 +507,4 @@
   (secret api :redis-sentinel)
   ;;=> {:redis-password "**************"}
 
-  (.close api)
-  )
+  (.close api))

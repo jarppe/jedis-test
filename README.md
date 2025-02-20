@@ -4,10 +4,16 @@ Testing how Jedis pool behaves when working with redis cluster when master is st
 
 ## Setup
 
+- Build images etc
+
+```bash
+bb init
+```
+
 - Start the Redis and Redis sentinel instances. And the dev container too.
 
 ```bash
-docker compose up
+bb up
 ```
 
 - Start vscode and run `Dev Containers: Reopen in container` command.
