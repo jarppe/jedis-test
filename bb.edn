@@ -9,12 +9,17 @@
                          (def image-dist-arch "linux/arm64,linux/amd64"))
 
          init        {:doc  "Init dev setup"
-                      :task (do
-                              (fs/copy "./deps.edn" "./.devcontainer/deps.edn" {:replace-existing true})
-                              (p/exec "devcontainer build"
-                                      "--image-name"       image-dev
-                                      "--workspace-folder" "."
-                                      "."))}
+                      :task (do (fs/copy "./deps.edn" "./.devcontainer/deps.edn" {:replace-existing true})
+                                (p/exec "devcontainer build"
+                                        "--image-name"       image-dev
+                                        "--workspace-folder" "."
+                                        ".")
+                                (when-not (-> "./secrets/id_ed25519" (io/file) (.exists))
+                                  (println "Generate SSH key pair for git access")
+                                  (println "TODO...")
+                                  (p/shell "kubectl create secret generic jarppe-devcontainer-ssh-secrets"
+                                           "--from-file=id_ed25519=./.secrets/id_ed25519"
+                                           "--from-file=id_ed25519.pub=./.secrets/id_ed25519.pub")))}
 
          local:up    {:doc  "Start dev setup"
                       :task (p/exec "docker compose up -d")}
@@ -34,6 +39,7 @@
          kube:up     {:doc  "Start the devcontainer pod in kube cluster"
                       :task (let [context   (-> (p/shell {:out :string} "kubectl ctx -c") :out (str/trim))
                                   namespace (-> (p/shell {:out :string} "kubectl ns -c") :out (str/trim))]
+
                               (println (format "Starting devcontainer pod on %s/%s..." context namespace))
                               (-> (p/process {:extra-env {"KUBE_CONTEXT"   context
                                                           "KUBE_NAMESPACE" namespace}
@@ -44,11 +50,19 @@
                                              "kubectl apply -f -")
                                   (deref)))}
 
-         kube:stop   {:doc  "Stop the devcontainer pod in kube cluster"
-                      :task (p/exec "kubectl delete pod jarppe-devcontainer")}
-
-         kube:sh     {:doc  "Open bash sell in devcontainer pod"
-                      :task (p/exec "kubectl exec -it jarppe-devcontainer -- bash")}
+         kube:down   {:doc  "Remove the devcontainer pod AND the PVC fromcluster"
+                      :task (do (print "This will remove the volume too, are you sure (y/n)? ")
+                                (flush)
+                                (when (= (.read System/in) 121)
+                                  (println "Ok, removing pod and pvc...")
+                                  (p/shell "kubectl delete -f ./.devcontainer/devcontainer.yaml")
+                                  (println "\nIt's all gone now")))}
 
          kube:ps     {:doc  "List devcontainer pods"
-                      :task (p/exec "kubectl get pods --selector devcontainer")}}}
+                      :task (p/exec "kubectl get pods --selector devcontainer,programmer=jarppe")}
+
+         kube:sh     {:doc  "Open bash sell in devcontainer pod"
+                      :task (p/exec "kubectl exec -it --container=app jarppe-devcontainer -- bash")}
+
+         kube:stop   {:doc  "Stop the devcontainer pod in kube cluster"
+                      :task (p/exec "kubectl delete pod jarppe-devcontainer")}}}
