@@ -1,39 +1,45 @@
-{:tasks {:requires ([clojure.string :as str]
-                    [clojure.java.io :as io]
-                    [babashka.process :as p]
-                    [babashka.fs :as fs])
+{:tasks {:requires   ([clojure.string :as str]
+                      [clojure.java.io :as io]
+                      [babashka.process :as p]
+                      [babashka.fs :as fs])
 
-         init      {:doc  "Init dev setup"
-                    :task (do (fs/copy "./deps.edn" "./.devcontainer/deps.edn" {:replace-existing true})
+         :init       (do (def image           "jarppe/cljdev")
+                         (def image-dev       (str image ":dev"))
+                         (def image-dist      (str image ":latest"))
+                         (def image-dist-arch "linux/arm64,linux/amd64"))
+
+         init        {:doc  "Init dev setup"
+                      :task (do
+                              (fs/copy "./deps.edn" "./.devcontainer/deps.edn" {:replace-existing true})
                               (p/exec "devcontainer build"
-                                      "--image-name" "jedis-test:dev"
+                                      "--image-name"       image-dev
                                       "--workspace-folder" "."
                                       "."))}
 
-         up        {:doc  "Start dev setup"
-                    :task (p/exec "docker compose up -d")}
+         local:up    {:doc  "Start dev setup"
+                      :task (p/exec "docker compose up -d")}
 
-         down      {:doc  "Start dev setup"
-                    :task (p/exec "docker compose down --remove-orphans --volumes")}
+         local:down  {:doc  "Start dev setup"
+                      :task (p/exec "docker compose down --remove-orphans --volumes")}
 
-         logs      {:doc  "Start dev setup"
-                    :task (p/exec "docker compose logs -f")}
+         local:logs  {:doc  "Start dev setup"
+                      :task (p/exec "docker compose logs -f")}
 
-         build     {:doc  "Build perf-test über jar"
-                    :task (clojure "-T:build build-all")}
+         local:build {:doc  "Build perf-test über jar"
+                      :task (clojure "-T:build build-all")}
 
-         perf      {:doc  "Run the perf-test app"
-                    :task (apply p/exec "java -jar ./target/perf-test.jar" *command-line-args*)}
+         local:perf  {:doc  "Run the perf-test app"
+                      :task (apply p/exec "java -jar ./target/perf-test.jar" *command-line-args*)}
 
-         pod:up    {:doc  "Start the devcontainer pod"
-                    :task (let [context   (-> (p/shell {:out :string} "kubectl ctx -c") :out (str/trim))
-                                namespace (-> (p/shell {:out :string} "kubectl ns -c") :out (str/trim))]
-                            (println (format "Starting devcontainer pod on %s/%s..." context namespace))
-                            (-> (p/process {:extra-env {"KUBE_CONTEXT"   context
-                                                        "KUBE_NAMESPACE" namespace}
-                                            :in        (io/file "./.devcontainer/devcontainer.yaml")}
-                                           "envsubst")
-                                (p/process {:out :inherit
-                                            :err :inherit}
-                                           "kubectl apply -f -")
-                                (deref)))}}}
+         kube:up     {:doc  "Start the devcontainer pod in kube cluster"
+                      :task (let [context   (-> (p/shell {:out :string} "kubectl ctx -c") :out (str/trim))
+                                  namespace (-> (p/shell {:out :string} "kubectl ns -c") :out (str/trim))]
+                              (println (format "Starting devcontainer pod on %s/%s..." context namespace))
+                              (-> (p/process {:extra-env {"KUBE_CONTEXT"   context
+                                                          "KUBE_NAMESPACE" namespace}
+                                              :in        (io/file "./.devcontainer/devcontainer.yaml")}
+                                             "envsubst")
+                                  (p/process {:out :inherit
+                                              :err :inherit}
+                                             "kubectl apply -f -")
+                                  (deref)))}}}
