@@ -68,6 +68,8 @@ spec:
       terminationMessagePath: /dev/termination-log
       terminationMessagePolicy: File
       imagePullPolicy: IfNotPresent
+  serviceAccountName: render-api
+  serviceAccount: render-api
   volumes:
     - name: persistent-storage
       persistentVolumeClaim:
