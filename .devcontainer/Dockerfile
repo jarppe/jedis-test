@@ -166,6 +166,7 @@ RUN \
 
 RUN \
   apt install -qy --no-install-recommends                                          \
+    openssh-client                                                                 \
     rlwrap                                                                         \
     groff                                                                          \
     fzf
@@ -186,10 +187,7 @@ ENTRYPOINT ["/tini", "--"]
 #
 
 WORKDIR /workspace
-
-COPY bashrc    /root/.bashrc
-COPY gitconfig /root/.gitconfig
-
+COPY  dotfiles/*  /root/
 CMD ["/bin/bash"]
 
 #

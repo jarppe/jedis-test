@@ -1,18 +1,19 @@
 {
-  "dockerComposeFile": "../docker-compose.yml",
-  "service": "devcontainer",
+  "name": "jarppe-devcontainer",
+  "image": "jarppe/dev:latest",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".",
+    "options": [
+      "--platform=linux/arm64,linux/amd64"
+    ]
+  },
   "workspaceFolder": "/workspace",
   "customizations": {
     "vscode": {
       "extensions": [
-        "betterthantomorrow.calva",
-        "ms-azuretools.vscode-docker",
-        "mutantdino.resourcemonitor"
+        "betterthantomorrow.calva"
       ]
     }
-  },
-  "mounts": [
-    "source=profile,target=/root,type=volume",
-    "target=/root/.vscode-server,type=volume"
-  ]
+  }
 }
