@@ -169,7 +169,8 @@ RUN \
     openssh-client                                                                 \
     rlwrap                                                                         \
     groff                                                                          \
-    fzf
+    fzf                                                                            \
+    vim
 
 #
 # tini:
