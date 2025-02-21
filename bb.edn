@@ -42,4 +42,13 @@
                                   (p/process {:out :inherit
                                               :err :inherit}
                                              "kubectl apply -f -")
-                                  (deref)))}}}
+                                  (deref)))}
+
+         kube:stop   {:doc  "Stop the devcontainer pod in kube cluster"
+                      :task (p/exec "kubectl delete pod jarppe-devcontainer")}
+
+         kube:sh     {:doc  "Open bash sell in devcontainer pod"
+                      :task (p/exec "kubectl exec -it jarppe-devcontainer -- bash")}
+
+         kube:ps     {:doc  "List devcontainer pods"
+                      :task (p/exec "kubectl get pods --selector devcontainer")}}}
