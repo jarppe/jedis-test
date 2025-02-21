@@ -13,6 +13,7 @@ spec:
   resources:
     requests:
       storage: 1Gi
+
 ---
 apiVersion: v1
 kind: Pod
@@ -38,11 +39,17 @@ spec:
          value: ${KUBE_NAMESPACE}
       volumeMounts:
         - name:      persistent-storage
-          mountPath: /workspace
           subPath:   workspace
+          mountPath: /workspace
         - name:      persistent-storage
-          mountPath: /root/.vscode-server
           subPath:   vscode-cache
+          mountPath: /root/.vscode-server
+        - name:      ssh-keys
+          subPath:   id_ed25519
+          mountPath: /root/.ssh/id_ed25519
+        - name:      ssh-keys
+          subPath:   id_ed25519.pub
+          mountPath: /root/.ssh/id_ed25519.pub
       resources:
         requests:
           cpu:    1000m
@@ -74,6 +81,10 @@ spec:
     - name: persistent-storage
       persistentVolumeClaim:
         claimName: jarppe-devcontainer-pvc
+    - name: ssh-keys
+      secret:
+        secretName: jarppe-devcontainer-ssh-secrets
+        defaultMode: 256
     - name: kube-api-access
       projected:
         sources:
