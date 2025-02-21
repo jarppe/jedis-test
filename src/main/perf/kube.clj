@@ -214,6 +214,7 @@
 
 
 (defn kube-proxy
+  ([] (kube-proxy nil 0))
   ([opts] (kube-proxy opts 0))
   ([opts port]
    (let [used-port (promise)
@@ -238,7 +239,7 @@
 
 
 (comment
-  (with-open [proxy (kube-proxy {:context "test:eu-west-1"})]
+  (with-open [proxy (kube-proxy)]
     (kube-proxy-port proxy))
   ;; 63382
   )
@@ -251,7 +252,7 @@
 ;;
 
 
-(defrecord KubeApiInst [proxy ctx proxy-port]
+(defrecord KubeApiInst [proxy ctx]
   java.io.Closeable
   (close [_] (p/destroy proxy))
 
@@ -268,7 +269,7 @@
                           (pr-str namespace)
                           "-")
                         (if (p/alive? proxy)
-                          (str "proxy-port=" proxy-port)
+                          (str "proxy-port=" (-> ctx :proxy-port))
                           (str "proxy-terminated,exit-code:" (p/exit-code proxy))))))
 
 
@@ -276,46 +277,22 @@
   (.write w (str v)))
 
 
-;; FIXME: This is the old way, fix this:
-#_(defn kube-api [ctx]
-    (let [proxy      (kube-proxy ctx)
-          proxy-port (kube-proxy-port proxy)]
-      (->KubeApiInst proxy ctx proxy-port)))
+(defn- load-pod-namespace []
+  (let [sa-namespace (io/file "/var/run/secrets/kubernetes.io/serviceaccount/namespace")]
+    (when (.canRead sa-namespace)
+      (-> sa-namespace (slurp) (str/trim)))))
 
 
-(defn get-ssl-engine [cacert]
-  (let [cert (with-open [in (io/input-stream cacert)]
-               (-> (java.security.cert.CertificateFactory/getInstance "X.509")
-                   (.generateCertificate in)))
-        ks   (doto (-> (java.security.KeyStore/getDefaultType)
-                       (java.security.KeyStore/getInstance))
-               (.load nil)
-               (.setCertificateEntry "cacert" cert))
-        tm   (-> (doto (-> (javax.net.ssl.TrustManagerFactory/getDefaultAlgorithm)
-                           (javax.net.ssl.TrustManagerFactory/getInstance))
-                   (.init ks))
-                 (.getTrustManagers))]
-    (-> (doto (javax.net.ssl.SSLContext/getInstance "TLS")
-          (.init nil tm nil))
-        (.createSSLEngine #_#_"kubernetes.default.svc" 443))))
-
-
-
-(defn kube-pod-api
-  ([] (kube-pod-api nil))
+(defn kube-api
+  ([] (kube-api nil))
   ([ctx]
-   (let [api-server "https://kubernetes.default.svc"
-         sa         (io/file "/var/run/secrets/kubernetes.io/serviceaccount")
-         token      (-> (io/file sa "token") (slurp) (str/trim))
-         ssl-engine (-> (io/file sa "ca.crt") (get-ssl-engine))
-         namespace  (-> (io/file sa "namespace") (slurp) (str/trim))]
-     (-> ctx
-         (update :namespace  (fnil identity namespace))
-         (merge {:api-server (str api-server ":443")
-                 :sslengine  ssl-engine})
-         (update :headers merge {"authorization" (str "Bearer " token)
-                                 "content-type"  "application/json"
-                                 "accept"        "application/json"})))))
+   (let [proxy      (kube-proxy ctx)
+         proxy-port (kube-proxy-port proxy)]
+     (->KubeApiInst proxy
+                    (-> ctx
+                        (assoc :proxy-port proxy-port)
+                        (assoc :base-url (str "http://127.0.0.1:" proxy-port))
+                        (update :namespace (fn [namespace] (or namespace (load-pod-namespace)))))))))
 
 
 (defn- path-template-value-not-found! [k]
@@ -323,13 +300,7 @@
 
 
 (defn- apply-path-template [req]
-  (let [api-url (-> req :api-url)]
-    (update req :url str/replace #"\{([^}]+)\}" (fn [[_ k]] (-> k (keyword) req (or (path-template-value-not-found! k)))))))
-
-
-(defn- apply-api-server [req]
-  (let [api-server (-> req :api-server)]
-    (update req :url (fn [url] (str api-server url)))))
+  (update req :url str/replace #"\{([^}]+)\}" (fn [[_ k]] (-> k (keyword) req (or (path-template-value-not-found! k))))))
 
 
 (defn kube-api-request
@@ -339,36 +310,22 @@
                      (if (map? left)
                        (merge left right)
                        right))
-                   api
+                   (-> api :ctx)
                    {:method method
                     :url    url}
                    opts)
        (apply-path-template)
-       (apply-api-server)
-       (org.httpkit.client/request)
-       #_(deref))))
+       (http/request))))
 
 
 (comment
-  (def api (kube-pod-api))
-
-  (def resp (org.httpkit.client/request (kube-api-request api :get "/api")))
-  (type resp)
-  (keys @resp)
-  ;;=> 
-
-
-  (let []
-    (kube-api-request api :get "/apis/apps/v1/namespaces/{namespace}/controllerrevisions")
-    #_(->> (kube-api-request api :get "/apis/apps/v1/namespaces/{namespace}/controllerrevisions")
-           :items
-           (map (comp :name :metadata))))
-  ;;=> ("elasticsearch-master-6775cdf686" 
-  ;;    "kafka-d69cd87f8" 
-  ;;    "kafka-zookeeper-6f8bbd74d8" 
-  ;;    "postgres-695b7fb84d" 
-  ;;    "redis-master-59d9795f85" 
-  ;;    "redis-sentinel-node-6789d465fd")
+  (with-open [api (kube-api)]
+    (-> (kube-api-request api :get "/api")
+        :body))
+  ;;=> {:kind                       "APIVersions"
+  ;;    :serverAddressByClientCIDRs [{:serverAddress "ip-172-16-127-15.eu-west-1.compute.internal:443"
+  ;;                                  :clientCIDR    "0.0.0.0/0"}]
+  ;;    :versions                   ["v1"]} 
   )
 
 
@@ -394,7 +351,7 @@
    (-> (kube-api-request api
                          :get
                          "/api/v1/namespaces/{namespace}/pods"
-                         {:query {:labelSelector (format-label-selector label-selector)}})
+                         #_{:query {:labelSelector (format-label-selector label-selector)}})
        :items)))
 
 
@@ -406,8 +363,13 @@
 
 
 (comment
-  (with-open [api (kube-api {:context   "test:eu-west-1"
-                             :namespace "review-3789"})]
+  (with-open [api (kube-api)]
+    (kube-api-request api
+                      :get
+                      "/api/v1/namespaces//pods"
+                      #_{:query {:labelSelector (format-label-selector label-selector)}}))
+
+  (with-open [api (kube-api)]
     (->> (pods api)
          (map (comp :name :metadata))
          (take 5)))

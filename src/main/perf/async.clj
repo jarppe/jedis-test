@@ -1,4 +1,7 @@
-(ns perf.async)
+(ns perf.async
+  (:import (java.util.function Function)
+           (java.util.concurrent CompletableFuture)))
+
 
 (set! *warn-on-reflection* true)
 
@@ -42,6 +45,17 @@
 
 (defmacro closeable-future [& body]
   `(closeable-future-call (^:once fn [] ~@body)))
+
+
+(defn then
+  (^CompletableFuture [^CompletableFuture fut ^Function f]
+   (.thenApply fut f))
+  (^CompletableFuture [^CompletableFuture fut ^Function f arg1]
+   (.thenApply fut (fn [x] (f x arg1))))
+  (^CompletableFuture [^CompletableFuture fut ^Function f arg1 arg2]
+   (.thenApply fut (fn [x] (f x arg1 arg2))))
+  (^CompletableFuture [^CompletableFuture fut ^Function f arg1 arg2 & args]
+   (.thenApply fut (fn [x] (apply f x arg1 arg2 args)))))
 
 
 (comment
