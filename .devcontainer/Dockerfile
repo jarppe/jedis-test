@@ -152,11 +152,6 @@ RUN \
 
 RUN \
   RELEASE=$(curl -sSLf "https://api.github.com/repos/grafana/k6/releases/latest" | jq -r ".tag_name") && \
-  case $(uname -m) in                                                              \
-    aarch64) TARGETARCH=arm64;;                                                          \
-    x86_64)  TARGETARCH=amd64;;                                                          \
-    *) echo "Unknown CPU: $(uname -m)"; exit 1;;                                   \
-  esac                                                                             && \
   curl -sSLf "https://github.com/grafana/k6/releases/download/${RELEASE}/k6-${RELEASE}-linux-${TARGETARCH}.tar.gz" \
     | tar -C /usr/local/bin --strip-components 1 -xzf -
 
@@ -169,6 +164,7 @@ RUN \
     openssh-client                                                                 \
     rlwrap                                                                         \
     groff                                                                          \
+    file                                                                           \
     fzf
 
 #
@@ -183,11 +179,25 @@ RUN \
 ENTRYPOINT ["/tini", "--"]
 
 #
+# Lazygit:
+#
+
+RUN \
+  case ${TARGETARCH} in                                                           \
+    amd64) ARCH=x86_64;;                                                          \
+    *)     ARCH=${TARGETARCH}                                                     \
+  esac                                                                            && \
+  RELEASE=$(curl -sSLf "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" | jq -r ".tag_name[1:]") && \
+  curl -sSLf "https://github.com/jesseduffield/lazygit/releases/download/v${RELEASE}/lazygit_${RELEASE}_Linux_${ARCH}.tar.gz" \
+    | tar -C /usr/local/bin -xzf - lazygit
+    
+#
 # Workspace:
 #
 
-WORKDIR /workspace
 COPY  dotfiles/*  /root/
+
+WORKDIR /workspace
 CMD ["/bin/bash"]
 
 #

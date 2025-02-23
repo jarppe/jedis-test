@@ -1,6 +1,5 @@
 {
   "name": "jarppe-devcontainer",
-  "image": "jarppe/dev:latest",
   "build": {
     "dockerfile": "Dockerfile",
     "context": ".",
