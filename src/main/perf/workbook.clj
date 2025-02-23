@@ -1,9 +1,7 @@
 (ns perf.workbook
   (:require [clojure.string :as str]
-            [clojure.java.io :as io]
             [jsonista.core :as json]
             [perf.datetime :refer [humanize-datetime]]
-            [perf.http :as http]
             [perf.kube :as k]
             [perf.process :as p]
             [perf.jedis :as j]
