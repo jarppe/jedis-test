@@ -9,17 +9,28 @@
                          (def image-dist-arch "linux/arm64,linux/amd64"))
 
          init        {:doc  "Init dev setup"
-                      :task (do (fs/copy "./deps.edn" "./.devcontainer/deps.edn" {:replace-existing true})
-                                (p/exec "devcontainer build"
-                                        "--image-name"       image-dev
-                                        "--workspace-folder" "."
-                                        ".")
-                                (when-not (-> "./secrets/id_ed25519" (io/file) (.exists))
-                                  (println "Generate SSH key pair for git access")
-                                  (println "TODO...")
-                                  (p/shell "kubectl create secret generic jarppe-devcontainer-ssh-secrets"
-                                           "--from-file=id_ed25519=./.secrets/id_ed25519"
-                                           "--from-file=id_ed25519.pub=./.secrets/id_ed25519.pub")))}
+                      :task (do (println "init:  Build Docker image for devcontainer...")
+                                (fs/copy "./deps.edn" "./.devcontainer/deps.edn" {:replace-existing true})
+                                (p/shell "devcontainer build"
+                                         "--image-name"       image-dev
+                                         "--workspace-folder" "."
+                                         ".")
+                                (let [secrets (doto (io/file "./.secrets") (.mkdirs))
+                                      keyfile (io/file secrets "id_ed25519")]
+                                  (when-not (.exists keyfile)
+                                    (println "\n\ninit: Generate SSH key pair for git access")
+                                    (p/shell "ssh-keygen"
+                                             "-t" "ed25519"
+                                             "-f" (str (.getName secrets) "/" (.getName keyfile))
+                                             "-N" ""
+                                             "-C" "devcontainer")
+                                    (println "\n\ninit: Generate kubernetes secret from ssh keys...")
+                                    (p/shell "kubectl create secret generic jarppe-devcontainer-ssh-secrets"
+                                             "--from-file=id_ed25519=./.secrets/id_ed25519"
+                                             "--from-file=id_ed25519.pub=./.secrets/id_ed25519.pub")
+                                    (println "\n\ninit: Now add the public key from ./.secrets/id_ed25519.pub to:")
+                                    (println "   GitHub:  https://github.com/settings/keys")
+                                    (println "   GitLab:  https://gitlab.com/-/user_settings/ssh_keys"))))}
 
          local:up    {:doc  "Start dev setup"
                       :task (p/exec "docker compose up -d")}
