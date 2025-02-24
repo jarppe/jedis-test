@@ -185,12 +185,12 @@ ENTRYPOINT ["/tini", "--"]
 RUN \
   case ${TARGETARCH} in                                                           \
     amd64) ARCH=x86_64;;                                                          \
-    *)     ARCH=${TARGETARCH}                                                     \
+    *)     ARCH=${TARGETARCH};;                                                   \
   esac                                                                            && \
   RELEASE=$(curl -sSLf "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" | jq -r ".tag_name[1:]") && \
   curl -sSLf "https://github.com/jesseduffield/lazygit/releases/download/v${RELEASE}/lazygit_${RELEASE}_Linux_${ARCH}.tar.gz" \
     | tar -C /usr/local/bin -xzf - lazygit
-    
+
 #
 # Workspace:
 #
